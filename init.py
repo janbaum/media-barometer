@@ -6,6 +6,7 @@ import random
 import string
 import json
 
+
 def gen_uniqueId():     # generate unique Identification-Code for each single article
     newId = ''.join(random.choice(string.ascii_letters) for _ in range(16))
     return newId
@@ -82,16 +83,40 @@ class Scraper:
                         self.main_table.update({'id': article['id'], 'scraped': 1, att[key_name[0]]: content}, ['id'])
 
     def faz_scraper(self):
+        try:
+            not_scraped_articles = self.main_table.find(author='Frankfurter Allgemeine Zeitung GmbH')
+            for article in not_scraped_articles:
+                link = article['link']
+                response = requests.get(link)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                div_element = soup.find('div', {'class': 'js-adobe-digital-data'})
+                data = div_element['data-digital-data']
+                json_data = json.loads(data)
+                author_name = json_data['article']['author']
+                if author_name == 'ohne Author':
+                    author_name = 'NV'
+                self.main_table.update({'id': article['id'], 'author': author_name}, ['id'])
+        except KeyError:
+            print(KeyError)
 
-        not_scraped_articles = self.main_table.find(author='Frankfurter Allgemeine Zeitung GmbH')
-        for article in not_scraped_articles:
-            link = article['link']
-            response = requests.get(link)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            div_element = soup.find('div', {'class': 'js-adobe-digital-data'})
-            data = div_element['data-digital-data']
-            json_data = json.loads(data)
-            author_name = json_data['article']['author']
-            if author_name == 'ohne Author':
-                author_name = 'NV'
-            self.main_table.update({'id': article['id'], 'author': author_name}, ['id'])
+    def ts_scraper(self, tag_class, attributes):
+        try:
+            not_scraped_articles = self.main_table.find(scraped=0)
+            for article in not_scraped_articles:
+                link = article['link']
+                response = requests.get(link)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                t = ''
+                try:
+                    tags = soup.find('article').find('ul', {'class': 'taglist'})
+                    for tag in tags.text.split():
+                        t = t + tag + ','
+                    key_name = list(attributes.keys())
+                    self.main_table.update({'id': article['id'], 'scraped': 1, attributes[key_name[0]]: t}, ['id'])
+                except (KeyError, AttributeError) as e:
+                    print('Error: ', e)
+                    key_name = list(attributes.keys())
+                    self.main_table.update({'id': article['id'], 'scraped': 1, attributes[key_name[0]]: 'NV'}, ['id'])
+        except (KeyError, AttributeError) as e:
+            print('Error: ', e)
+
